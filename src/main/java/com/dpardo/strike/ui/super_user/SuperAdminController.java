@@ -5,6 +5,7 @@ import com.dpardo.strike.domain.SessionManager;
 import com.dpardo.strike.domain.SessionViewModel;
 import com.dpardo.strike.domain.UiComboItem;
 import com.dpardo.strike.repository.SuperAdminRepository;
+import com.dpardo.strike.repository.UserRepository;
 import javafx.animation.FadeTransition;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleBooleanProperty;
@@ -20,26 +21,25 @@ import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.layout.BorderPane;
 import javafx.stage.Stage;
 import javafx.util.Duration;
 
 import java.io.IOException;
-// import java.sql.SQLException; // <-- ELIMINADO
 import java.sql.Timestamp;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-/**
- * Controlador para la ventana de Super Administrador.
- * (Adaptado para manejar el Repositorio de Hibernate)
- */
 public class SuperAdminController {
 
-    //--- Componentes FXML (Sin cambios) ---
+    //--- Componentes FXML ---
+    @FXML private BorderPane superadminBorderPane;
     @FXML private ComboBox<UiComboItem> viewSelectorComboBox;
     @FXML private Button userInfoButton;
     @FXML private Tooltip usernameTooltip;
+
     @FXML private TableView<SessionViewModel> mainTableView;
     @FXML private TableColumn<SessionViewModel, Integer> pidColumn;
     @FXML private TableColumn<SessionViewModel, String> userColumn;
@@ -52,14 +52,13 @@ public class SuperAdminController {
     @FXML private TableColumn<SessionViewModel, Timestamp> fecAsignacionColumn;
     @FXML private TableColumn<SessionViewModel, Boolean> activoColumn;
 
-    //--- Repositorios y Servicios (Sin cambios) ---
-    private final SuperAdminRepository repository = new SuperAdminRepository();
+    //--- Repositorios ---
+    private final SuperAdminRepository superAdminRepository = new SuperAdminRepository();
+    private final UserRepository userRepository = new UserRepository();
+
     private ScheduledService<ObservableList<SessionViewModel>> sessionUpdateService;
     private final Map<String, String> uiPathMap = new HashMap<>();
 
-    /**
-     * Método de inicialización. (Sin cambios)
-     */
     @FXML
     public void initialize() {
         setupUserInfo();
@@ -68,93 +67,13 @@ public class SuperAdminController {
         startSessionUpdateService();
     }
 
-    /**
-     * Detiene los servicios en segundo plano. (Sin cambios)
-     */
     public void stop() {
         if (sessionUpdateService != null) {
             sessionUpdateService.cancel();
-            System.out.println("Servicio de actualización de sesiones detenido.");
         }
     }
 
-    //--- Manejadores de Eventos FXML (Sin cambios) ---
-
-    @FXML
-    private void handleViewSelection() {
-        UiComboItem selectedUi = viewSelectorComboBox.getValue();
-        if (selectedUi != null) {
-            String fxmlPath = uiPathMap.get(selectedUi.codComponente());
-            if (fxmlPath != null) {
-                openNewWindow(fxmlPath, selectedUi.descripcion());
-            } else {
-                System.err.println("No se encontró la ruta para: " + selectedUi.codComponente());
-            }
-            Platform.runLater(() -> viewSelectorComboBox.getSelectionModel().clearSelection());
-        }
-    }
-
-    @FXML
-    private void handleUserInfoClick() {
-        SessionInfo currentSession = SessionManager.getCurrentSession();
-        if (currentSession == null) return;
-
-        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Información del Usuario");
-        alert.setHeaderText("Detalles de la Sesión Actual");
-
-        String content = String.format(
-                "ID de Usuario: %d\n" +
-                        "Rol: %s\n" +
-                        "PID de la Sesión: %d\n" +
-                        "IP Cliente: %s\n" +
-                        "Puerto Cliente: %d",
-                currentSession.userId(),
-                currentSession.roleName(),
-                currentSession.pid(),
-                currentSession.clientAddress(),
-                currentSession.clientPort()
-        );
-        alert.setContentText(content);
-        alert.showAndWait();
-    }
-
-    //--- Métodos Privados de Configuración ---
-
-    /**
-     * Configura la información del usuario. (Sin cambios)
-     */
-    private void setupUserInfo() {
-        SessionInfo currentSession = SessionManager.getCurrentSession();
-        if (currentSession != null) {
-            usernameTooltip.setText("Usuario: " + currentSession.userId());
-        }
-    }
-
-    /**
-     * Carga las vistas disponibles desde la BD en el ComboBox de navegación.
-     * (MODIFICADO: Se eliminó el 'try-catch(SQLException)')
-     */
-    private void setupComboBox() {
-        uiPathMap.put("homeBorderPane", "/com/dpardo/strike/ui/read_only/Home-view.fxml");
-        uiPathMap.put("adminBorderPane", "/com/dpardo/strike/ui/data_writer/Home-admin.fxml");
-        uiPathMap.put("superadminBorderPane", "/com/dpardo/strike/ui/super_user/Home-superadmin.fxml");
-
-        // --- El bloque try-catch fue eliminado ---
-        // Nuestro 'repository.obtenerUis()' ahora devuelve una lista vacía
-        // si falla, por lo que no lanzará una excepción aquí.
-        SessionInfo currentSession = SessionManager.getCurrentSession();
-        if (currentSession != null) {
-            int userId = currentSession.userId();
-            viewSelectorComboBox.setItems(FXCollections.observableArrayList(repository.obtenerUis(userId)));
-        }
-
-        viewSelectorComboBox.setOnAction(event -> handleViewSelection());
-    }
-
-    /**
-     * Configura las columnas de la TableView. (Sin cambios)
-     */
+    //--- Configuración de Tabla ---
     private void setupTableView() {
         pidColumn.setCellValueFactory(cellData -> new SimpleIntegerProperty(cellData.getValue().pid()).asObject());
         userColumn.setCellValueFactory(cellData -> new SimpleStringProperty(cellData.getValue().nombreUsuario()));
@@ -168,44 +87,99 @@ public class SuperAdminController {
         activoColumn.setCellValueFactory(cellData -> new SimpleBooleanProperty(cellData.getValue().rolActivo()).asObject());
     }
 
-    /**
-     * Inicia un servicio que actualiza la tabla de sesiones periódicamente.
-     * (Sin cambios. El Task ya maneja 'Exception' genéricas, y nuestro
-     * repositorio ahora devuelve una lista vacía si falla, por lo que
-     * 'setOnFailed' solo se activará si el Task de JavaFX falla,
-     * lo cual es correcto.)
-     */
     private void startSessionUpdateService() {
         sessionUpdateService = new ScheduledService<>() {
             @Override
             protected Task<ObservableList<SessionViewModel>> createTask() {
                 return new Task<>() {
                     @Override
-                    protected ObservableList<SessionViewModel> call() throws Exception {
-                        // Esta llamada ya no lanza SQLException.
-                        return FXCollections.observableArrayList(repository.obtenerSesionesActivas());
+                    protected ObservableList<SessionViewModel> call() {
+                        return FXCollections.observableArrayList(superAdminRepository.obtenerSesionesActivas());
                     }
                 };
             }
         };
-
         sessionUpdateService.setPeriod(Duration.seconds(3));
         sessionUpdateService.setOnSucceeded(event -> mainTableView.setItems(sessionUpdateService.getValue()));
-        sessionUpdateService.setOnFailed(event -> sessionUpdateService.getException().printStackTrace());
         sessionUpdateService.start();
     }
 
-    /**
-     * Carga y muestra una nueva ventana FXML. (Sin cambios)
-     */
+    //--- Navegación y Header ---
+
+    private void setupComboBox() {
+        uiPathMap.put("homeBorderPane", "/com/dpardo/strike/ui/read_only/Home-view.fxml");
+        uiPathMap.put("adminBorderPane", "/com/dpardo/strike/ui/data_writer/Home-admin.fxml");
+        uiPathMap.put("superadminBorderPane", "/com/dpardo/strike/ui/super_user/Home-superadmin.fxml");
+
+        SessionInfo currentSession = SessionManager.getCurrentSession();
+        if (currentSession != null) {
+            int userId = currentSession.userId();
+            List<UiComboItem> uis = userRepository.obtenerUisPermitidas(userId);
+            viewSelectorComboBox.setItems(FXCollections.observableArrayList(uis));
+        }
+        viewSelectorComboBox.setOnAction(event -> handleViewSelection());
+    }
+
+    @FXML
+    private void handleViewSelection() {
+        UiComboItem selectedUi = viewSelectorComboBox.getValue();
+        if (selectedUi != null) {
+            String fxmlPath = uiPathMap.get(selectedUi.codComponente());
+            if (fxmlPath != null) {
+                openNewWindow(fxmlPath, selectedUi.descripcion());
+            }
+            Platform.runLater(() -> viewSelectorComboBox.getSelectionModel().clearSelection());
+        }
+    }
+
+    private void setupUserInfo() {
+        SessionInfo currentSession = SessionManager.getCurrentSession();
+        if (currentSession != null) {
+            usernameTooltip.setText("Usuario: " + currentSession.userId());
+        }
+    }
+
+    @FXML
+    private void handleUserInfoClick() {
+        SessionInfo currentSession = SessionManager.getCurrentSession();
+        if (currentSession == null) return;
+        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+        alert.setTitle("Información");
+        alert.setHeaderText("Usuario Actual");
+        alert.setContentText("ID: " + currentSession.userId() + "\nRol: " + currentSession.roleName());
+        alert.showAndWait();
+    }
+
     private void openNewWindow(String fxmlPath, String title) {
         try {
             Parent root = FXMLLoader.load(Objects.requireNonNull(getClass().getResource(fxmlPath)));
             Stage stage = new Stage();
             stage.setTitle(title);
-            // Añade las dimensiones 960x600 (o las que prefieras)
-            stage.setScene(new Scene(root, 960, 600)); // <-- ARREGLADO
+
+            // FIX: Tamaño explícito
+            Scene scene = new Scene(root, 960, 600);
+            stage.setScene(scene);
+
+            stage.setMinWidth(960);
+            stage.setMinHeight(600);
+            stage.setWidth(960);
+            stage.setHeight(600);
+            stage.setResizable(false);
+
+            // Animación de entrada
+            root.setOpacity(0.0);
+            FadeTransition fadeIn = new FadeTransition(Duration.millis(500), root);
+            fadeIn.setFromValue(0.0);
+            fadeIn.setToValue(1.0);
+
             stage.show();
+            stage.centerOnScreen();
+            fadeIn.play();
+
+            // Cerrar actual
+            Stage currentStage = (Stage) superadminBorderPane.getScene().getWindow();
+            currentStage.close();
+
         } catch (IOException | NullPointerException e) {
             e.printStackTrace();
         }
