@@ -4,60 +4,51 @@ import jakarta.persistence.*;
 
 /**
  * Clase Entidad que mapea la tabla 'session'.
- *
- * VERSIÓN CORREGIDA:
- * Mapea la clave primaria compuesta (id_session, id_user)
- * usando @EmbeddedId y @MapsId.
+ * CORREGIDO: Se usa id_session como Clave Primaria única (IDENTITY).
  */
 @Entity
 @Table(name = "session")
 public class Session {
 
-    /**
-     * La Clave Primaria Compuesta.
-     */
-    @EmbeddedId
-    private SessionId id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "id_session", nullable = false)
+    private Integer idSession;
 
-    /**
-     * Mapea la columna 'user_addr' (tipo 'inet' en PG)
-     * a un String en Java.
-     */
     @Column(name = "user_addr", nullable = false)
     private String userAddr; // 'inet' se mapea a String
 
     @Column(name = "user_port", nullable = false)
     private Integer userPort;
 
-    /**
-     * Mapea 'pid'. Es NULLEABLE.
-     */
     @Column(name = "pid")
     private Integer pid;
 
-    // --- (1) RELACIÓN CON USER (que es parte de la PK) ---
-    /**
-     * @MapsId("idUser"): Conecta esta relación
-     * con el campo 'idUser' dentro de la clave SessionId.
-     */
+    // Relación con User
+    // Nota: En la BD es parte de la PK compuesta, pero en JPA la tratamos como
+    // una relación obligatoria. Hibernate manejará la FK 'id_user'.
     @ManyToOne(fetch = FetchType.LAZY)
-    @MapsId("idUser") // "idUser" debe coincidir con el nombre de la variable en SessionId.java
     @JoinColumn(name = "id_user", nullable = false)
     private User user;
-
-    // --- Constructor, Getters y Setters ---
 
     public Session() {
     }
 
-    // --- Getters y Setters ---
-
-    public SessionId getId() {
-        return id;
+    public Session(String userAddr, Integer userPort, Integer pid, User user) {
+        this.userAddr = userAddr;
+        this.userPort = userPort;
+        this.pid = pid;
+        this.user = user;
     }
 
-    public void setId(SessionId id) {
-        this.id = id;
+    // --- Getters y Setters ---
+
+    public Integer getIdSession() {
+        return idSession;
+    }
+
+    public void setIdSession(Integer idSession) {
+        this.idSession = idSession;
     }
 
     public String getUserAddr() {

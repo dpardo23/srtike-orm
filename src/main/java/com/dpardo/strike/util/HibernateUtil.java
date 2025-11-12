@@ -1,55 +1,60 @@
 package com.dpardo.strike.util;
 
+import com.dpardo.strike.domain.SessionManager;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.Persistence;
+import org.hibernate.Session; // Importante: Session de Hibernate, no tu entidad
+
+import java.sql.Connection;
+import java.sql.Statement;
 
 /**
- * Clase de utilidad para gestionar la factoría de EntityManager de JPA (Hibernate).
- * Reemplaza a la antigua clase DatabaseConnection.java.
- *
- * Esta clase sigue el patrón Singleton para asegurar que solo exista
- * una instancia del costoso EntityManagerFactory en toda la aplicación.
+ * Utilidad Singleton para Hibernate.
+ * Incluye soporte para Auditoría (Triggers de PostgreSQL).
  */
 public class HibernateUtil {
 
-    // El EntityManagerFactory es el objeto principal de JPA.
-    // Es "thread-safe" y costoso de crear, por eso creamos solo uno.
     private static final EntityManagerFactory emf;
 
-    // Bloque estático de inicialización.
-    // Esto se ejecuta una sola vez cuando la clase es cargada por primera vez.
     static {
         try {
-            // Lee el archivo /META-INF/persistence.xml
-            // y busca la unidad de persistencia llamada "strike-pu".
             emf = Persistence.createEntityManagerFactory("strike-pu");
         } catch (Throwable ex) {
-            // Si algo sale mal (ej: no se puede conectar a la BD,
-            // el XML está mal formado), registra el error y falla.
-            System.err.println("¡Error! Fallo al crear el EntityManagerFactory de Hibernate. " + ex);
+            System.err.println("Error inicializando EntityManagerFactory: " + ex);
             throw new ExceptionInInitializerError(ex);
         }
     }
 
-    /**
-     * Obtiene un nuevo EntityManager (la "conexión" o "sesión")
-     * desde la factoría.
-     *
-     * ¡Importante! El EntityManager NO es thread-safe.
-     * Cada hilo (o cada operación) debe pedir uno nuevo.
-     *
-     * @return Un nuevo EntityManager.
-     */
     public static EntityManager getEntityManager() {
         return emf.createEntityManager();
     }
 
     /**
-     * Cierra la factoría de EntityManager.
-     * Esto debe ser llamado cuando la aplicación se cierra (ej: en el
-     * método stop() de tu MainApplication) para liberar todos los recursos.
+     * Configura la variable de sesión 'app.current_user_id' en la base de datos
+     * para que los Triggers de auditoría funcionen correctamente.
+     * Debe llamarse justo después de em.getTransaction().begin().
      */
+    public static void setAuditUser(EntityManager em) {
+        Integer currentUserId = SessionManager.getCurrentUserId();
+
+        // Solo ejecutamos esto si hay un usuario logueado
+        if (currentUserId != null) {
+            // Desempaquetamos la sesión de Hibernate para acceder a la conexión JDBC nativa
+            // Esto es más seguro y rápido que crear queries nativas JPA para variables de sesión
+            try {
+                em.unwrap(Session.class).doWork(connection -> {
+                    try (Statement stmt = connection.createStatement()) {
+                        stmt.execute("SET app.current_user_id = " + currentUserId);
+                    }
+                });
+            } catch (Exception e) {
+                System.err.println("Advertencia: No se pudo establecer el usuario de auditoría. " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+    }
+
     public static void shutdown() {
         if (emf != null) {
             emf.close();
