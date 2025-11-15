@@ -35,12 +35,13 @@ import java.util.Objects;
 public class SuperAdminController {
 
     //--- Componentes FXML ---
-    @FXML private BorderPane superadminBorderPane;
+    @FXML private BorderPane superadminBorderPane; // <-- IMPORTANTE
     @FXML private ComboBox<UiComboItem> viewSelectorComboBox;
     @FXML private Button userInfoButton;
     @FXML private Tooltip usernameTooltip;
-
     @FXML private TableView<SessionViewModel> mainTableView;
+
+    // (Columnas de la tabla)
     @FXML private TableColumn<SessionViewModel, Integer> pidColumn;
     @FXML private TableColumn<SessionViewModel, String> userColumn;
     @FXML private TableColumn<SessionViewModel, String> correoColumn;
@@ -126,7 +127,10 @@ public class SuperAdminController {
         if (selectedUi != null) {
             String fxmlPath = uiPathMap.get(selectedUi.codComponente());
             if (fxmlPath != null) {
-                openNewWindow(fxmlPath, selectedUi.descripcion());
+                // No abras la ventana si ya estás en ella
+                if (!selectedUi.codComponente().equals("superadminBorderPane")) {
+                    openNewWindow(fxmlPath, "strike");
+                }
             }
             Platform.runLater(() -> viewSelectorComboBox.getSelectionModel().clearSelection());
         }
@@ -156,7 +160,6 @@ public class SuperAdminController {
             Stage stage = new Stage();
             stage.setTitle(title);
 
-            // FIX: Tamaño explícito
             Scene scene = new Scene(root, 960, 600);
             stage.setScene(scene);
 
@@ -166,7 +169,7 @@ public class SuperAdminController {
             stage.setHeight(600);
             stage.setResizable(false);
 
-            // Animación de entrada
+            // Animación
             root.setOpacity(0.0);
             FadeTransition fadeIn = new FadeTransition(Duration.millis(500), root);
             fadeIn.setFromValue(0.0);
@@ -176,7 +179,7 @@ public class SuperAdminController {
             stage.centerOnScreen();
             fadeIn.play();
 
-            // Cerrar actual
+            // --- CORRECCIÓN: Cerrar la ventana actual ---
             Stage currentStage = (Stage) superadminBorderPane.getScene().getWindow();
             currentStage.close();
 

@@ -7,45 +7,55 @@ import com.dpardo.strike.entity.User;
 import com.dpardo.strike.util.HibernateUtil;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityTransaction;
-import jakarta.persistence.NoResultException;
+import jakarta.persistence.NoResultException; // Sigue siendo útil
 import jakarta.persistence.Query;
 import jakarta.persistence.TypedQuery;
 
 import java.util.ArrayList;
-import java.util.List;
+import java.util.List; // Importante
 
 /**
  * Repositorio de Usuario.
- * Encargado de la autenticación y de los permisos/navegación del usuario.
+ * CORREGIDO: Maneja usuarios con múltiples roles.
  */
 public class UserRepository {
 
     /**
-     * Autentica al usuario y registra la sesión.
+     * Autentica al usuario. Si tiene múltiples roles, inicia sesión con el
+     * rol de ID más alto (más privilegiado).
      */
     public SessionInfo authenticateAndRegisterSession(String username, String password) {
         EntityManager em = HibernateUtil.getEntityManager();
         EntityTransaction tx = null;
 
         try {
-            // 1. Buscar Usuario y su Rol Activo
+            // 1. Buscar Usuario y sus Roles Activos, ordenados por privilegio (ID)
             String jpql = "SELECT u, r.nombre " +
                     "FROM User u " +
                     "JOIN UserRol ur ON u.idUser = ur.id.idUser " +
                     "JOIN Rol r ON ur.id.idRol = r.idRol " +
                     "WHERE u.nombreUsuario = :username " +
-                    "AND ur.activo = true";
+                    "AND ur.activo = true " +
+                    "ORDER BY r.idRol DESC"; // <-- CORRECCIÓN: Ordenamos por ID de Rol (3, 2, 1)
 
             TypedQuery<Object[]> query = em.createQuery(jpql, Object[].class);
             query.setParameter("username", username);
 
-            Object[] result;
-            try {
-                result = query.getSingleResult();
-            } catch (NoResultException e) {
+            // --- INICIO DE LA CORRECCIÓN DE LÓGICA ---
+
+            // Usamos getResultList() en lugar de getSingleResult()
+            List<Object[]> results = query.getResultList();
+
+            if (results.isEmpty()) {
+                // Si la lista está vacía, el usuario no existe o no tiene roles activos
                 System.err.println("Usuario no encontrado o sin rol activo: " + username);
                 return null;
             }
+
+            // Tomamos el primer resultado (que es el rol más alto gracias al ORDER BY)
+            Object[] result = results.get(0);
+
+            // --- FIN DE LA CORRECCIÓN DE LÓGICA ---
 
             User user = (User) result[0];
             String roleName = (String) result[1];
@@ -60,7 +70,6 @@ public class UserRepository {
             tx = em.getTransaction();
             tx.begin();
 
-            // Datos simulados del cliente
             String clientIp = "127.0.0.1";
             int clientPort = (int) (Math.random() * 60000) + 1024;
             int pid = (int) ProcessHandle.current().pid();
@@ -70,6 +79,7 @@ public class UserRepository {
 
             tx.commit();
 
+            // Devolvemos la sesión con el rol de mayor privilegio
             return new SessionInfo(
                     user.getIdUser(),
                     pid,
@@ -90,20 +100,18 @@ public class UserRepository {
     /**
      * Obtiene las UIs permitidas para un usuario siguiendo la ruta:
      * User -> UserRol -> RolPermission -> PermissionUi -> UI
-     * (Reemplaza la lógica antigua de sub-consultas con Joins eficientes)
+     * (Este método ya funciona correctamente con múltiples roles)
      */
     @SuppressWarnings("unchecked")
     public List<UiComboItem> obtenerUisPermitidas(int userId) {
         try (EntityManager em = HibernateUtil.getEntityManager()) {
-            // Esta consulta replica tu lógica de navegación original:
-            // Partimos de las tablas intermedias hasta llegar a la UI.
             String sql =
                     "SELECT DISTINCT ui.id_ui, ui.cod_componente, ui.descripcion " +
                             "FROM ui " +
-                            "JOIN permission_ui pu ON ui.id_ui = pu.id_ui " +         // UI <-> PermisoUI
+                            "JOIN permission_ui pu ON ui.id_ui = pu.id_ui " +
                             "JOIN permission p ON pu.id_permission = p.id_permission " +
-                            "JOIN rol_permission rp ON p.id_permission = rp.id_permission " + // Permiso <-> RolPermiso
-                            "JOIN user_rol ur ON rp.id_rol = ur.id_rol " +            // RolPermiso <-> UsuarioRol
+                            "JOIN rol_permission rp ON p.id_permission = rp.id_permission " +
+                            "JOIN user_rol ur ON rp.id_rol = ur.id_rol " +
                             "WHERE ur.id_user = ? " +
                             "AND ur.activo = true " +
                             "AND rp.activo = true " +

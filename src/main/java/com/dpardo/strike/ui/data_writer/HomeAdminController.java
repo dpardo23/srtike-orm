@@ -31,17 +31,15 @@ import java.util.Objects;
 public class HomeAdminController {
 
     //--- Componentes FXML ---
-    @FXML private BorderPane adminBorderPane;
+    @FXML private BorderPane adminBorderPane; // <-- IMPORTANTE
+    @FXML private StackPane formContainer;
     @FXML private Button paisButton;
     @FXML private Button jugadorButton;
     @FXML private Button equiposButton;
     @FXML private Button partidoButton;
     @FXML private Button ligaButton;
-    @FXML private StackPane formContainer;
     @FXML private Button borrarButton;
     @FXML private Button editarButton;
-
-    // Header Components
     @FXML private Button userInfoadminButton;
     @FXML private Tooltip usernameAdminTooltip;
     @FXML private ComboBox<UiComboItem> viewSelectorAdminComboBox;
@@ -86,6 +84,7 @@ public class HomeAdminController {
         try {
             Node newFormNode = FXMLLoader.load(Objects.requireNonNull(getClass().getResource(fxmlPath)));
             if (!formContainer.getChildren().isEmpty()) {
+                // (Tu lógica de FadeTransition está bien)
                 Node oldFormNode = formContainer.getChildren().get(0);
                 FadeTransition fadeOut = new FadeTransition(Duration.millis(250), oldFormNode);
                 fadeOut.setFromValue(1.0);
@@ -108,7 +107,6 @@ public class HomeAdminController {
                 fadeIn.play();
             }
         } catch (IOException | NullPointerException e) {
-            System.err.println("Error al cargar formulario: " + fxmlPath);
             e.printStackTrace();
         }
     }
@@ -141,7 +139,10 @@ public class HomeAdminController {
         if (selectedUi != null) {
             String fxmlPath = uiPathMap.get(selectedUi.codComponente());
             if (fxmlPath != null) {
-                openNewWindow(fxmlPath, selectedUi.descripcion());
+                // No abras la ventana si ya estás en ella
+                if (!selectedUi.codComponente().equals("adminBorderPane")) {
+                    openNewWindow(fxmlPath, "strike");
+                }
             }
             Platform.runLater(() -> viewSelectorAdminComboBox.getSelectionModel().clearSelection());
         }
@@ -174,7 +175,6 @@ public class HomeAdminController {
             Stage stage = new Stage();
             stage.setTitle(title);
 
-            // FIX: Tamaño explícito
             Scene scene = new Scene(root, 960, 600);
             stage.setScene(scene);
 
@@ -187,7 +187,7 @@ public class HomeAdminController {
             stage.show();
             stage.centerOnScreen();
 
-            // Cerrar ventana actual
+            // --- CORRECCIÓN: Cerrar la ventana actual ---
             Stage currentStage = (Stage) adminBorderPane.getScene().getWindow();
             currentStage.close();
 

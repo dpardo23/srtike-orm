@@ -31,20 +31,18 @@ import java.util.Objects;
 public class HomeController {
 
     // --- Componentes FXML ---
-    @FXML private Button jugadoresButton;
-    @FXML private Button estadisticasButton;
-    @FXML private Button equiposButton;
-    @FXML private Button partidosButton;
-    @FXML private Button clasificacionButton;
-    @FXML private Button resumenButton;
-    @FXML private Button ligaButton;
-    @FXML private BorderPane mainBorderPane;
+    @FXML private BorderPane homeBorderPane; // <-- IMPORTANTE: Debe coincidir con el FXML
     @FXML private VBox paisContenedor;
-
-    // Header Components
     @FXML private ComboBox<UiComboItem> viewHomeComboBox;
     @FXML private Button userinfoHomeButton;
     @FXML private Tooltip usernameAdminTooltip;
+
+    // (Otros botones de menú que no usas para navegación de roles)
+    @FXML private Button jugadoresButton;
+    @FXML private Button equiposButton;
+    @FXML private Button partidosButton;
+    @FXML private Button clasificacionButton;
+    @FXML private Button ligaButton;
 
     // --- Repositorios ---
     private final PaisRepository paisRepository = new PaisRepository();
@@ -71,7 +69,6 @@ public class HomeController {
                 Node nodoPaisItem = loader.load();
                 PaisItemController paisController = loader.getController();
 
-                // Carga segura de imagen
                 String rutaImagen = "/images/flags/" + pais.codigo() + ".png";
                 if (getClass().getResource(rutaImagen) != null) {
                     Image bandera = new Image(getClass().getResourceAsStream(rutaImagen));
@@ -108,7 +105,10 @@ public class HomeController {
         if (selectedUi != null) {
             String fxmlPath = uiPathMap.get(selectedUi.codComponente());
             if (fxmlPath != null) {
-                openNewWindow(fxmlPath, selectedUi.descripcion());
+                // No abras la ventana si ya estás en ella
+                if (!selectedUi.codComponente().equals("homeBorderPane")) {
+                    openNewWindow(fxmlPath, "strike");
+                }
             }
             Platform.runLater(() -> viewHomeComboBox.getSelectionModel().clearSelection());
         }
@@ -127,14 +127,11 @@ public class HomeController {
     private void handleUserInfoClick() {
         SessionInfo currentSession = SessionManager.getCurrentSession();
         if (currentSession == null) return;
-        mostrarInfoUsuario(currentSession);
-    }
 
-    private void mostrarInfoUsuario(SessionInfo s) {
         Alert alert = new Alert(Alert.AlertType.INFORMATION);
-        alert.setTitle("Información del Usuario");
-        alert.setHeaderText("Sesión Actual");
-        alert.setContentText("Usuario ID: " + s.userId() + "\nRol: " + s.roleName());
+        alert.setTitle("Información");
+        alert.setHeaderText("Usuario Actual");
+        alert.setContentText("ID: " + currentSession.userId() + "\nRol: " + currentSession.roleName());
         alert.showAndWait();
     }
 
@@ -144,7 +141,6 @@ public class HomeController {
             Stage stage = new Stage();
             stage.setTitle(title);
 
-            // FIX: Tamaño explícito
             Scene scene = new Scene(root, 960, 600);
             stage.setScene(scene);
 
@@ -157,8 +153,8 @@ public class HomeController {
             stage.show();
             stage.centerOnScreen();
 
-            // Cerrar ventana actual
-            Stage currentStage = (Stage) mainBorderPane.getScene().getWindow();
+            // --- CORRECCIÓN: Cerrar la ventana actual ---
+            Stage currentStage = (Stage) homeBorderPane.getScene().getWindow();
             currentStage.close();
 
         } catch (IOException | NullPointerException e) {
